@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::hash::Hasher;
 use std::result;
 use std::thread;
 use std::char;
@@ -22,8 +23,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     //let mut pidx = Pid::new(2.50, 0.005, 0.02, 97.0, 97.0, 97.0, 97.0, 0.0);
     uart.set_read_mode(0, Duration::new(0,0));
 
-    let mut ringbuffer: [char;256];
-    let mut buffer: [u8;256];
+    let mut ringbuffer: [char;256] = [0 as char;256];
+    let mut buffer: &mut [u8;256] = &mut [0;256];
     let mut readpos: u8 = 0;
     let mut writepos: u8 = 0;
     let mut lineAvailable:bool = false;
@@ -37,12 +38,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         let mut s =0;
         let mut charcount: u8 = 0;
-        let s = uart.read_bytes(&buffer);
+        let s = uart.read_bytes(buffer);
         match s{
             Ok(n) => {
             while n as u8 > charcount{
-                ringbuffer[writepos]= buffer[charcount];
-                if ringbuffer[charcount]=='\n'{
+                ringbuffer[writepos as usize]= buffer[charcount as usize] as char;
+                if ringbuffer[charcount as usize]=='\n'{
                     lineAvailable=true;
                 }
                 charcount+=1;
@@ -51,11 +52,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             },
             Err(err) =>{
-
+                let ban= String::from("test");
+                uart.write(ban);
             }
         }
         if lineAvailable{
-
+            let ban= String::from("test");
+            uart.write(ban);
         }
 /*
         let s = uart.read_line().unwrap_or_default();
