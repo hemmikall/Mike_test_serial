@@ -39,12 +39,17 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut line_available:bool = false;
 
     let mut v = 0;
-    let mut direction = 0;
+    let mut direction: i16 = 0;
     let mut v_rot = 0;
     let mut direction_rot = 0;
+    let mut distance_sensor: u8 = 0;
+    let mut IMU_H:i16 =0;
+    let mut IMU_L:i16 =0;
+    let mut IMU_D:i16 =0;
+    let mut distance_sensor: u8=0;
     loop {
         //println!("State 2");
-        thread::sleep(Duration::from_millis(1000));
+        //thread::sleep(Duration::from_millis(1000));
 
         
         // read uart
@@ -60,11 +65,16 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
             while n as u8 > charcount{
                 ringbuffer[writepos as usize]= buffer[charcount as usize] as char;
-                if ringbuffer[charcount as usize]=='\n'{
+                if ringbuffer[writepos as usize]=='\n'{
                     line_available=true;
                 }
                 charcount+=1;
-                writepos+=1;
+                if writepos != 255{
+                    writepos+=1;
+                }
+                else{
+                    writepos=0;
+                }
             }
 
             },
@@ -75,37 +85,46 @@ fn main() -> Result<(), Box<dyn Error>> {
         // parse uart if line is available
         if line_available{
             line_available = false;
-            let ban= String::from("Line read:\n");
-            let t=uart.write(ban);
-            match t{
-                Ok(n)=>{
-                    //println!("Wrote {} bytes to serial port",n);
-                }
-                Err(err) =>{
-                    //println!("Error writing to serial port: {}",err);
-                }
-            }
+            let mut read:[char;256] = [0 as char;256];
+            let mut len = 0;
             while readpos!=writepos{
-                // drive command received
-                if ringbuffer[readpos as usize] == 'D' && ringbuffer[(readpos+1) as usize] == 'R' {
-                    direction = ((ringbuffer[(readpos+2) as usize]as i16*256) + (ringbuffer[(readpos+3) as usize]as i16)) as i32;
-                    v = ringbuffer[(readpos+4) as usize] as i32;
-                    println!("drive dir: {} \nspeed: {}",direction,v);
+                read[len as usize] = ringbuffer[readpos as usize];
+                len+=1;
+                if readpos !=255{
+                    readpos+=1;
+
                 }
-                // rotate command received
-                if ringbuffer[readpos as usize] == 'R' && ringbuffer[(readpos+1) as usize] == 'O' {
-                    direction_rot = ((ringbuffer[(readpos+2) as usize]as i16*256) + (ringbuffer[(readpos+3) as usize]as i16)) as i32;
-                    v_rot = ringbuffer[(readpos+4) as usize] as i32;
-                    println!("rotate dir: {} \nspeed: {}",direction_rot,v_rot);
+                else{
+                    readpos=0;
                 }
-                // set mode command received
-                if ringbuffer[readpos as usize] == 'S' && ringbuffer[(readpos+1) as usize] == 'M' {
-                    current_mode = ringbuffer[(readpos+2) as usize] as u8;
-                    println!("set to mode: {}",current_mode);
-                }
-                readpos+=1;
             }
-            
+            // drive command received
+            if read[0 as usize] == 'D' && read[(1) as usize] == 'R' {
+                direction = (((read[(2 as u8) as usize] as i16 )<<8) + (read[(3) as usize]as i16))*10;
+                v = read[(4 as u8) as usize] as i32;
+                println!("drive dir: {} \nspeed: {}",direction,v);
+            }
+            // rotate command received
+            if read[0 as usize] == 'R' && read[(1 as u8) as usize] == 'O' {
+                direction_rot = ((read[(2 as u8) as usize] as i16 )<<8) + (read[(3) as usize]as i16);
+                v_rot = read[(4 as u8) as usize] as i32;
+                println!("rotate dir: {} \nspeed: {}",direction_rot,v_rot);
+            }
+            // set mode command received
+            if read[0 as usize] == 'S' && read[(1) as usize] == 'M' {
+                current_mode = read[(2 as u8) as usize] as u8-1;
+                println!("set to mode: {}",current_mode);
+            }// set mode command received
+            if read[0 as usize] == 'D' && read[(1) as usize] == 'S' {
+                distance_sensor = read[(2 as u8) as usize] as u8;
+                println!("Distance sensor: {}",distance_sensor);
+            }// rotate command received
+            if read[0 as usize] == 'I' && read[(1 as u8) as usize] == 'M' {
+                IMU_H = ((read[(2 as u8) as usize] as i16 )<<8) + (read[(3) as usize]as i16);
+                IMU_L = ((read[(4 as u8) as usize] as i16 )<<8) + (read[(6) as usize]as i16);
+                IMU_D = ((read[(6 as u8) as usize] as i16 )<<8) + (read[(9) as usize]as i16);
+                println!("H: {} \nL: {}\nD: {}",IMU_H,IMU_L,IMU_D);
+            }
         }
 
         // put code for each mode withing statements below
@@ -205,57 +224,21 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         }
         
-/*
-        let s = uart.read_line().unwrap_or_default();
-        if s.trim().is_empty() == false {
-        let spl = s.trim().split(",");
-        let vectstr: Vec<&str> = spl.collect();
-        if vectstr[0] == "hld" && vectstr[4] == "end"
-        {
-        let heading = vectstr[1].parse::<f64>().unwrap_or_default();
-        let leaning = vectstr[2].parse::<f64>().unwrap_or_default();}}
-        //let direction = vectstr[3].parse::<f64>().unwrap_or_default();
-        
-       
-        
-       
-        let cams = uart.read().unwrap_or_default();
-        if cams.trim().is_empty() == false {
-        let camspl = cams.trim().split(",");
-        let camvectstr: Vec<&str> = camspl.collect();
-        if camvectstr[0] == "D" && camvectstr[1] == "R" && camvectstr[5] == "\r" && camvectstr[6] == "\n"
-        {
-            v = camvectstr[4].parse::<f64>().unwrap_or_default();
-        }
-        if camvectstr[0] == "R" && camvectstr[1] == "O" && camvectstr[5] == "\r" && camvectstr[6] == "\n"
-        {
-
-        }}
-        */ 
-
-        /*
-        let mut angle1 = 0.0;
-        let mut angle2 = 0.0;
-        let mut angle3 = 0.0;
-        unsafe{
-
-            angle1 = (PI*10000.0/30000.0 as i64)+direction*((PI*1000.0/1800000.0) as i64);
-            angle2 = PI/3.0-(direction as f64)*PI/1800.0;
-            angle3 = (direction as f64)*PI/1800.0;
-    
-        }
+        let angle1 = PI/3.0+(direction as f64)*(PI/1800.0);
+        let angle2 = PI/3.0-(direction as f64)*PI/1800.0;
+        let angle3 = (direction as f64)*PI/1800.0;
         //println!("State 3");
         //let outputx = pidx.next_control_output(leaning_xpart);
         //let mut vx = outputx.output;
         
         //calculate motor values
-        v = 50.0;
-        let vc = v*(angle1.cos())+80.0;
-        let va = v*(angle2.cos())+80.0;
-        let vb = -1.0*v*(angle3.cos())+80.0;
+        v = 50;
+        let vc = (v as f64)*(angle1.cos())+80.0;
+        let va = (v as f64)*(angle2.cos())+80.0;
+        let vb = -1.0*(v as f64)*(angle3.cos())+80.0;
 
         //println!("{} {} {}", vc,va,vb);
-        */
+        
         //write to motors 
 //        let mut buffer_w = [251,vc as u8,252,va as u8,253,vb as u8,0xA,0xD];
 //        i2c_imu.block_write(0x01, &mut buffer_w).unwrap_or_default();
