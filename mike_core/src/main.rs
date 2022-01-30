@@ -1,3 +1,4 @@
+//use core::num::dec2flt::float;
 use std::error::Error;
 //use std::hash::Hasher;
 //use std::result;
@@ -8,7 +9,7 @@ use rpi_embedded::uart::{Parity, Uart};
 use rpi_embedded::i2c::I2c;
 //extern crate pid;
 //use pid::Pid;
-pub const PI: f64 = 3.14159265358979323846264338327950288f64;
+pub const PI: f64 = 3.14159265358979323846264338327950288;
 
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -19,7 +20,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     i2c.set_slave_address(0x53)?;
     i2c_imu.set_slave_address(0x57)?;
     let mut v: f64;
-    println!("State 1");
+    //println!("State 1");
     //let mut pidx = Pid::new(2.50, 0.005, 0.02, 97.0, 97.0, 97.0, 97.0, 0.0);
     let s= uart.set_read_mode(0, Duration::new(0,0));
     match s{
@@ -36,10 +37,16 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut readpos: u8 = 0;
     let mut writepos: u8 = 0;
     let mut line_available:bool = false;
+
+    let mut v = 0;
+    let mut direction = 0;
+    let mut v_rot = 0;
+    let mut direction_rot = 0;
     loop {
-        println!("State 2");
+        //println!("State 2");
         thread::sleep(Duration::from_millis(1000));
 
+        
         // read uart
         uart.set_read_mode(0, Duration::default())?;
         uart.set_write_mode(false)?;
@@ -48,7 +55,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         let s = uart.read_bytes(buffer);
         match s{
             Ok(n) => {
-                println!("Read {} bytes from serial port",n);
+                if n>0 as usize{
+                    println!("Read {} bytes from serial port",n);
+                }
             while n as u8 > charcount{
                 ringbuffer[writepos as usize]= buffer[charcount as usize] as char;
                 if ringbuffer[charcount as usize]=='\n'{
@@ -66,7 +75,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         // parse uart if line is available
         if line_available{
             line_available = false;
-            let ban= String::from("test");
+            let ban= String::from("Line read:\n");
             let t=uart.write(ban);
             match t{
                 Ok(n)=>{
@@ -76,25 +85,27 @@ fn main() -> Result<(), Box<dyn Error>> {
                     //println!("Error writing to serial port: {}",err);
                 }
             }
-            let mut size: u8 = 0;
-            if readpos<writepos{
-                size = writepos-readpos;
-            }
-            else{
-                let mut temp_pos = readpos;
-                while temp_pos != readpos{
-                    temp_pos+=1;
-                    size+=1;
+            while readpos!=writepos{
+                // drive command received
+                if ringbuffer[readpos as usize] == 'D' && ringbuffer[(readpos+1) as usize] == 'R' {
+                    direction = ((ringbuffer[(readpos+2) as usize]as i16*256) + (ringbuffer[(readpos+3) as usize]as i16)) as i32;
+                    v = ringbuffer[(readpos+4) as usize] as i32;
+                    println!("drive dir: {} \nspeed: {}",direction,v);
                 }
-            }
-            if size>0{
-                while readpos!=writepos{
-                    readpos+=1;
+                // rotate command received
+                if ringbuffer[readpos as usize] == 'R' && ringbuffer[(readpos+1) as usize] == 'O' {
+                    direction_rot = ((ringbuffer[(readpos+2) as usize]as i16*256) + (ringbuffer[(readpos+3) as usize]as i16)) as i32;
+                    v_rot = ringbuffer[(readpos+4) as usize] as i32;
+                    println!("rotate dir: {} \nspeed: {}",direction_rot,v_rot);
                 }
-                // place parsing code here
-                current_mode = 1;
-
+                // set mode command received
+                if ringbuffer[readpos as usize] == 'S' && ringbuffer[(readpos+1) as usize] == 'M' {
+                    current_mode = ringbuffer[(readpos+2) as usize] as u8;
+                    println!("set to mode: {}",current_mode);
+                }
+                readpos+=1;
             }
+            
         }
 
         // put code for each mode withing statements below
@@ -222,13 +233,18 @@ fn main() -> Result<(), Box<dyn Error>> {
         }}
         */ 
 
-        let mut direction = 0.0;
-            direction +=45.0;
-        let angle1 = PI/3.0+direction*PI/1800.0;
-        let angle2 = PI/3.0-direction*PI/1800.0;
-        let angle3 = direction*PI/1800.0;
+        /*
+        let mut angle1 = 0.0;
+        let mut angle2 = 0.0;
+        let mut angle3 = 0.0;
+        unsafe{
 
-        println!("State 3");
+            angle1 = (PI*10000.0/30000.0 as i64)+direction*((PI*1000.0/1800000.0) as i64);
+            angle2 = PI/3.0-(direction as f64)*PI/1800.0;
+            angle3 = (direction as f64)*PI/1800.0;
+    
+        }
+        //println!("State 3");
         //let outputx = pidx.next_control_output(leaning_xpart);
         //let mut vx = outputx.output;
         
@@ -239,7 +255,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let vb = -1.0*v*(angle3.cos())+80.0;
 
         //println!("{} {} {}", vc,va,vb);
-        
+        */
         //write to motors 
 //        let mut buffer_w = [251,vc as u8,252,va as u8,253,vb as u8,0xA,0xD];
 //        i2c_imu.block_write(0x01, &mut buffer_w).unwrap_or_default();
