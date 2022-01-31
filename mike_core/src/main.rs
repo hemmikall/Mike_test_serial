@@ -2,7 +2,7 @@
 use std::error::Error;
 //use std::hash::Hasher;
 //use std::result;
-use std::thread;
+//use std::thread;
 use std::char;
 use std::time::Duration;
 use rpi_embedded::uart::{Parity, Uart};
@@ -16,10 +16,11 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut uart = Uart::new(115_200, Parity::None, 8, 1)?;
     let mut i2c = I2c::new()?;
-    let mut i2c_imu = I2c::new()?;
+    let mut i2c_crane = I2c::new()?;
     i2c.set_slave_address(0x53)?;
-    i2c_imu.set_slave_address(0x57)?;
-    let mut v: f64;
+    i2c_crane.set_slave_address(0x51)?;
+    let mut liftdone = 0;
+    let mut liftreport = 0;
     //println!("State 1");
     //let mut pidx = Pid::new(2.50, 0.005, 0.02, 97.0, 97.0, 97.0, 97.0, 0.0);
     let s= uart.set_read_mode(0, Duration::new(0,0));
@@ -40,12 +41,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut v = 0;
     let mut direction: i16 = 0;
-    let mut v_rot = 0;
-    let mut direction_rot = 0;
-    let mut distance_sensor: u8 = 0;
-    let mut IMU_H:i16 =0;
-    let mut IMU_L:i16 =0;
-    let mut IMU_D:i16 =0;
+    let mut camdirection: i16 = 0;
+    let mut v_rot:i32;
+    let mut direction_rot:i16;
+    let mut imu_h:i16;
+    let mut imu_l:i16;
+    let mut imu_d:i16;
     let mut distance_sensor: u8=0;
     loop {
         //println!("State 2");
@@ -100,7 +101,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
             // drive command received
             if read[0 as usize] == 'D' && read[(1) as usize] == 'R' {
-                direction = (((read[(2 as u8) as usize] as i16 )<<8) + (read[(3) as usize]as i16))*10;
+                camdirection = (((read[(2 as u8) as usize] as i16 )<<8) + (read[(3) as usize]as i16))*10;
                 v = read[(4 as u8) as usize] as i32;
                 println!("drive dir: {} \nspeed: {}",direction,v);
             }
@@ -120,10 +121,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                 println!("Distance sensor: {}",distance_sensor);
             }// rotate command received
             if read[0 as usize] == 'I' && read[(1 as u8) as usize] == 'M' {
-                IMU_H = ((read[(2 as u8) as usize] as i16 )<<8) + (read[(3) as usize]as i16);
-                IMU_L = ((read[(4 as u8) as usize] as i16 )<<8) + (read[(6) as usize]as i16);
-                IMU_D = ((read[(6 as u8) as usize] as i16 )<<8) + (read[(9) as usize]as i16);
-                println!("H: {} \nL: {}\nD: {}",IMU_H,IMU_L,IMU_D);
+                imu_h = ((read[(2 as u8) as usize] as i16 )<<8) + (read[(3) as usize]as i16);
+                imu_l = ((read[(4 as u8) as usize] as i16 )<<8) + (read[(6) as usize]as i16);
+                imu_d = ((read[(6 as u8) as usize] as i16 )<<8) + (read[(9) as usize]as i16);
+                println!("H: {} \nL: {}\nD: {}",imu_h,imu_l,imu_d);
             }
         }
 
@@ -223,7 +224,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 // everything else
             }
         }
-        
+        direction = 1500-camdirection;         // when it reads the direction from pixy arduino - flip it and deduct 300.0
         let angle1 = PI/3.0+(direction as f64)*(PI/1800.0);
         let angle2 = PI/3.0-(direction as f64)*PI/1800.0;
         let angle3 = (direction as f64)*PI/1800.0;
@@ -231,22 +232,34 @@ fn main() -> Result<(), Box<dyn Error>> {
         //let outputx = pidx.next_control_output(leaning_xpart);
         //let mut vx = outputx.output;
         
-        //calculate motor values
-        v = 50;
-        let vc = (v as f64)*(angle1.cos())+80.0;
-        let va = (v as f64)*(angle2.cos())+80.0;
-        let vb = -1.0*(v as f64)*(angle3.cos())+80.0;
+        //calculate motor value
+        let va = (v as f64)*(angle1.cos())+80.0;
+        let vb = (v as f64)*(angle2.cos())+80.0;
+        let vc = -1.0*(v as f64)*(angle3.cos())+80.0;
 
         //println!("{} {} {}", vc,va,vb);
         
-        //write to motors 
-//        let mut buffer_w = [251,vc as u8,252,va as u8,253,vb as u8,0xA,0xD];
-//        i2c_imu.block_write(0x01, &mut buffer_w).unwrap_or_default();
+        let mut buffer_w = [0x01,251,va as u8,252,vb as u8,253,vc as u8,0xA,0xD];
+        i2c.write(&mut buffer_w).unwrap_or_default();
 
-//        let mut buffer_r = [0u8;7];
-//        i2c_imu.block_read(0x1E,&mut buffer_r).unwrap_or_default();
-//        println!("block read with length {} using command 0x1E -> {:?} ", buffer_r.len(), buffer_r);
-        //println!("Lx: {} Vx: {}", direction, v);
+
+
+
+        let mut cbuffer_r = [0;5];
+
+        i2c_crane.read(&mut cbuffer_r)?;
+        //println!("write read with length {} -> {:?} ", cbuffer_r.len(), cbuffer_r);
+
+        if cbuffer_r[0] == 1 && cbuffer_r[1] == 112 && cbuffer_r[3] == 13 && cbuffer_r[4] == 10{
+            liftreport = cbuffer_r[2];
+        }
+        if liftreport == 1 {
+            liftdone = 1;
+            liftreport = 0;
+        }
+
+        let mut cbuffer_w = [0x01,241,liftdone as u8,242,40 as u8,243,40 as u8,0xA,0xD];
+        i2c_crane.write(&mut cbuffer_w).unwrap_or_default();
         
 
 
