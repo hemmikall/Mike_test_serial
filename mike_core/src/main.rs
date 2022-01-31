@@ -19,7 +19,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut i2c_crane = I2c::new()?;
     i2c.set_slave_address(0x53)?;
     i2c_crane.set_slave_address(0x51)?;
-    let mut liftdone = 0;
+    let mut liftdone = 1;
     let mut liftreport = 0;
     //println!("State 1");
     //let mut pidx = Pid::new(2.50, 0.005, 0.02, 97.0, 97.0, 97.0, 97.0, 0.0);
@@ -43,7 +43,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut direction: i16 = 0;
     let mut camdirection: i16 = 0;
     let mut v_rot:i32;
-    let mut direction_rot:i16;
+    let mut direction_rot:i16 = 0;
     let mut imu_h:i16;
     let mut imu_l:i16;
     let mut imu_d:i16;
@@ -66,8 +66,15 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
             while n as u8 > charcount{
                 ringbuffer[writepos as usize]= buffer[charcount as usize] as char;
-                if ringbuffer[writepos as usize]=='\n'{
-                    line_available=true;
+                if writepos>0{ 
+                    if ringbuffer[writepos as usize]=='\n' && ringbuffer[(writepos-1) as usize]=='\r'{
+                        line_available=true;
+                    }   
+                }
+                else{
+                    if ringbuffer[writepos as usize]=='\n' && ringbuffer[(255) as usize]=='\r'{
+                        line_available=true;
+                    }
                 }
                 charcount+=1;
                 if writepos != 255{
@@ -101,9 +108,15 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
             // drive command received
             if read[0 as usize] == 'D' && read[(1) as usize] == 'R' {
-                camdirection = (((read[(2 as u8) as usize] as i16 )<<8) + (read[(3) as usize]as i16))*10;
-                v = read[(4 as u8) as usize] as i32;
-                println!("drive dir: {} \nspeed: {}",direction,v);
+                println!("Fist byte {} second byte {} " ,read[(2 as u8) as usize] as u8,read[(3 as u8) as usize] as u8);
+                camdirection = (((read[(2 as u8) as usize] as i16  -1)<<8) + (read[(3) as usize]as i16-1));
+                v = read[(4 as u8) as usize] as i32-1;
+                let sign = read[(2 as u8) as usize];
+                if sign == '-'{
+                    camdirection=camdirection*(-1);
+                }
+
+                println!("drive dir: {} \nspeed: {}",camdirection,v);
             }
             // rotate command received
             if read[0 as usize] == 'R' && read[(1 as u8) as usize] == 'O' {
@@ -237,10 +250,20 @@ fn main() -> Result<(), Box<dyn Error>> {
         let vb = (v as f64)*(angle2.cos())+80.0;
         let vc = -1.0*(v as f64)*(angle3.cos())+80.0;
 
+        if direction_rot > 20 {
+            let mut buffer_w = [0x01,251,(va as u8)+10,252,(vb as u8)+10,253,(vc as u8)-10,0xA,0xD];
+        i2c.write(&mut buffer_w).unwrap_or_default();
+        }
+        else if direction_rot < -20 {
+            let mut buffer_w = [0x01,251,(va as u8)-10,252,(vb as u8)-10,253,(vc as u8)-10,0xA,0xD];
+        i2c.write(&mut buffer_w).unwrap_or_default();
+        } 
+        else{
+            let mut buffer_w = [0x01,251,va as u8,252,vb as u8,253,vc as u8,0xA,0xD];
+            i2c.write(&mut buffer_w).unwrap_or_default();
+        }
         //println!("{} {} {}", vc,va,vb);
         
-        let mut buffer_w = [0x01,251,va as u8,252,vb as u8,253,vc as u8,0xA,0xD];
-        i2c.write(&mut buffer_w).unwrap_or_default();
 
 
 
