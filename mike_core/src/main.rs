@@ -63,7 +63,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Set serial mode
     uart.set_read_mode(0, Duration::default())?;
-    uart.set_write_mode(false)?;
+    uart.set_write_mode(true)?;
     loop {
         //println!("State 2");
         //thread::sleep(Duration::from_millis(1000));
@@ -261,8 +261,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             
                 // set mode command received
                 else if read[i as usize] == 'S' && read[(i_1) as usize] == 'M' {
-                    current_mode = read[((i_2) as u8) as usize] as u8-1;
-                    println!("set to mode: {}",current_mode);
+                    if read[((i_2) as u8) as usize] as u8 >= 1{
+                        current_mode = read[((i_2) as u8) as usize] as u8-1;
+                        println!("set to mode: {}",current_mode);
+                    }
                 }
                 /*
                 // set mode command received
@@ -342,9 +344,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                 // when distance sesnor triggers change modes to mode 7 and send to camera
             }
             6 =>{
-                if distance_sensor_1 < 200{
+                
+                if distance_sensor_1 < 150 && distance_sensor_1 > 20{
                     uart.write("setmode 7c\r\n".to_string())?;
+                    thread::sleep(Duration::from_millis(12));
                 }
+                uart.write("distance1i\r\n".to_string())?;
                 // state is 6
                 // orignial plan - drive to bridge
             }
@@ -354,7 +359,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                 // deploy crane// crane operation
                 liftdone = 0;
                 v=0;
+                direction_rot = 0;
                 uart.write("setmode 8c\r\n".to_string())?;
+                thread::sleep(Duration::from_millis(12));
             }
             8 =>{
                 
@@ -363,8 +370,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                 i2c_crane.write(&mut cbuffer_w).unwrap_or_default();
             
                 v=0;
+                direction_rot = 0;
                 if liftdone == 1{
                     uart.write("setmode 9c\r\n".to_string())?;
+                    thread::sleep(Duration::from_millis(12));
                     loopcount = 0;
                 }
                 // state is 8
@@ -375,16 +384,18 @@ fn main() -> Result<(), Box<dyn Error>> {
                 // read distance senor to verify bridge is up
                 // if not, try again then verify and if failed again, jump to 17
                     uart.write("distance1i\r\n".to_string())?;
-                    if distance_sensor_1 > 150{
-                        uart.write("setmode 40c\r\n".to_string())?;
-                    }
                     loopcount +=1;
-                    thread::sleep(Duration::from_millis(500));
-                    if loopcount>5{
+                    thread::sleep(Duration::from_millis(12));
+                    if distance_sensor_1 > 150{
+                        uart.write("setmode 44c\r\n".to_string())?;
+                        thread::sleep(Duration::from_millis(12));
+                    }
+                    else if loopcount>5{
                         uart.write("setmode 7c\r\n".to_string())?;
+                        thread::sleep(Duration::from_millis(12));
                     }
             }
-            40 =>{
+            44 =>{
                 // state is 10
                 // follow line up to intersection if going for brige and hill
                 // driven by camera
@@ -407,8 +418,21 @@ fn main() -> Result<(), Box<dyn Error>> {
                 // drive in circle
                 // read IMU to read current heading
                 // switch to mode 15 when IMU is within 90° of original heading
-                let mut buffer_w = [0x01,251,40 as u8,252,80 as u8,253,97 as u8,0xA,0xD];
-                i2c.write(&mut buffer_w).unwrap_or_default();
+
+                //uart.write("distance2i\r\n".to_string())?;
+                //if(distance_sensor_2 < 190 && distance_sensor_2 > 170){
+
+                    let mut buffer_w = [0x01,251,5 as u8,252,80 as u8,253,104 as u8,0xA,0xD];
+                    i2c.write(&mut buffer_w).unwrap_or_default();
+                /* }
+                else if(distance_sensor_2 > 190){
+                    let mut buffer_w = [0x01,251,50 as u8,252,80 as u8,253,97 as u8,0xA,0xD];
+                    i2c.write(&mut buffer_w).unwrap_or_default();
+                }
+                else{
+                    let mut buffer_w = [0x01,251,30 as u8,252,80 as u8,253,97 as u8,0xA,0xD];
+                    i2c.write(&mut buffer_w).unwrap_or_default();
+                }*/
             }
             14 =>{
                 // state is 14
@@ -419,9 +443,33 @@ fn main() -> Result<(), Box<dyn Error>> {
                 // driven by camera
                 // follow line towards button
             }
-            26 =>{
+            17 =>{
+                let mut cbuffer_w = [0x01,241,liftdone as u8,242,90 as u8,243,30 as u8,0xA,0xD];
+                i2c_crane.write(&mut cbuffer_w).unwrap_or_default();
+                thread::sleep(Duration::from_millis(500));
+                let mut cbuffer_w = [0x01,241,liftdone as u8,242,90 as u8,243,90 as u8,0xA,0xD];
+                i2c_crane.write(&mut cbuffer_w).unwrap_or_default();
+                // state is 15
+                // driven by camera
+                // follow line towards button
+            }
+            18 =>{
+                thread::sleep(Duration::from_millis(5000));
+                let mut cbuffer_w = [0x01,241,liftdone as u8,242,30 as u8,243,90 as u8,0xA,0xD];
+                i2c_crane.write(&mut cbuffer_w).unwrap_or_default();
+                thread::sleep(Duration::from_millis(500));
+                let mut cbuffer_w = [0x01,241,liftdone as u8,242,90 as u8,243,90 as u8,0xA,0xD];
+                i2c_crane.write(&mut cbuffer_w).unwrap_or_default();
+                // state is 15
+                // driven by camera
+                // follow line towards button
+            }
+            36 =>{
                 // state is 16
                 // press button to end
+                    //if distance_sensor_1 > 150{
+                    //    uart.write("setmode 40c\r\n".to_string())?;
+                    //}
                 
             }
 
