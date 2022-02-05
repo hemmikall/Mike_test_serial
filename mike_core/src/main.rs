@@ -41,18 +41,16 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut line_available:bool = false;
     let mut normal_distance = 0;
     let mut set_normal_distance = false;
+    let mut normal_distance2 = 0;
+    let mut set_normal_distance2 = false;
 
     let mut v = 0;
     let mut direction: i16;
     let mut camdirection: i16 = 0;
     let mut v_rot:i32;
     let mut direction_rot:i16 = 0;
-    let mut imu_h:i16;
-    let mut imu_l:i16;
-    let mut imu_d:i16;
-    let mut distance_sensor: u8=0;
-    let mut h_ref = 0;
-    let mut imu_refFlag:u8 = 0;
+    let mut distance_sensor_1: u8=0;
+    let mut distance_sensor_2: u8=0;
 // thread communications
     let (tx_i16,rx_i16): (Sender<String>,Receiver<String>) = channel();
     let (tx_i16_2,rx_i16_2): (Sender<String>,Receiver<String>) = channel();
@@ -97,12 +95,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                 println!("{}",val);
                 if val.chars().nth(0).unwrap()>='0' && val.chars().nth(0).unwrap()<='9'{
-                    direction = val.parse().unwrap();
-                    if direction == 0{
-                        imu_refFlag = 0;
-                        normal_distance = 0;
-                    }
-                    println!("Set direction to: {}",direction);
+                    direction_rot = val.parse().unwrap();
+                    println!("Set direction to: {}",direction_rot);
                 }
             }
             Err(err)=>{
@@ -249,28 +243,30 @@ fn main() -> Result<(), Box<dyn Error>> {
                     //    println!("Fist byte {} second byte {} " ,read[(2 as u8) as usize] as u8,read[(3 as u8) as usize] as u8);
                     camdirection = ((read[((i_2) as u8) as usize] as i16  -1)<<8) + (read[(i_3) as usize]as i16-1);
                     v = read[(i_4 as u8) as usize] as i32-1;
-                let sign = read[((i_5) as u8) as usize];
-                if sign == '-'{
-                    camdirection=camdirection*(-1);
-                }
+                    let sign = read[((i_5) as u8) as usize];
+                    if sign == '-'{
+                        camdirection = camdirection.abs()*(-1);
+                       // println!("right");
+                    }
+                    //println!("drive dir: {} \nspeed: {}",camdirection,v);
                 }
 
-               //println!("drive dir: {} \nspeed: {}",camdirection,v);
             
-            // rotate command received
-            else if read[i as usize] == 'R' && read[((i_1) as u8) as usize] == 'O' {
-                direction_rot = ((read[((i_2) as u8) as usize] as i16 )<<8) + (read[(i_3) as usize]as i16);
-                v_rot = read[((i_4) as u8) as usize] as i32;
-             //println!("rotate dir: {} \nspeed: {}",direction_rot,v_rot);
-            }
-            // set mode command received
-            else if read[i as usize] == 'S' && read[(i_1) as usize] == 'M' {
-                current_mode = read[((i_2) as u8) as usize] as u8-1;
-                println!("set to mode: {}",current_mode);
-            }// set mode command received
+                // rotate command received
+                else if read[i as usize] == 'R' && read[((i_1) as u8) as usize] == 'O' {
+                    direction_rot = ((read[((i_2) as u8) as usize] as i16 )<<8) + (read[(i_3) as usize]as i16);
+                    v_rot = read[((i_4) as u8) as usize] as i32;
+                    //println!("rotate dir: {} \nspeed: {}",direction_rot,v_rot);
+                }
             
-            
-            else if read[i as usize] == 'I' && read[((i_1) as u8) as usize] == 'M' {
+                // set mode command received
+                else if read[i as usize] == 'S' && read[(i_1) as usize] == 'M' {
+                    current_mode = read[((i_2) as u8) as usize] as u8-1;
+                    println!("set to mode: {}",current_mode);
+                }
+                /*
+                // set mode command received
+                else if read[i as usize] == 'I' && read[((i_1) as u8) as usize] == 'M' {
                     imu_h = ((read[((i_2) as u8) as usize] as i16 )<<8) + (read[(i_3) as usize]as i16);
                     imu_l = ((read[((i_4) as u8) as usize] as i16 )<<8) + (read[(i_5) as usize]as i16);
                     imu_d = ((read[((i_6) as u8) as usize] as i16 )<<8) + (read[(i_7) as usize]as i16);
@@ -281,19 +277,26 @@ fn main() -> Result<(), Box<dyn Error>> {
                         println!("IMU calibrated");
                     }
                       println!("H: {}",imu_h);
-                }
+                }*/
 
-            else if read[i as usize] == 'D' && read[(i_1) as usize] == 'S' {
-                distance_sensor = read[((i_2) as u8) as usize] as u8;
-                if set_normal_distance {
-                    normal_distance = distance_sensor;
-                    set_normal_distance = false;
-                }
-                println!("Distance sensor: {}",distance_sensor);
-            }// rotate command received
+                else if read[i as usize] == 'X' && read[(i_1) as usize] == '1' {
+                    distance_sensor_1 = read[((i_2) as u8) as usize] as u8;
+                    if set_normal_distance {
+                        normal_distance = distance_sensor_1;
+                        set_normal_distance = false;
+                    }
+                    println!("Distance sensor 1: {}",distance_sensor_1);
+                }// rotate command received
+
+                else if read[i as usize] == 'X' && read[(i_1) as usize] == '2' {
+                    distance_sensor_2 = read[((i_2) as u8) as usize] as u8;
+                    if set_normal_distance2 {
+                        normal_distance2 = distance_sensor_2;
+                        set_normal_distance2 = false;
+                    }
+                    println!("Distance sensor 2: {}",distance_sensor_2);
+                }// rotate command received
             }
-            
-        
         }
 
 // put code for each mode withing statements below
@@ -302,23 +305,16 @@ fn main() -> Result<(), Box<dyn Error>> {
                 // state is 0
                 // default off mode
                 if normal_distance == 0{
-                    uart.write("distancei\r\n".to_string())?;
+                    uart.write("distance1i\r\n".to_string())?;
                     set_normal_distance = true;
-                    thread::sleep(Duration::from_millis(500));
-                }
-                if imu_refFlag == 0{
-                    imu_refFlag = 1;
-                    uart.write("readi\r\n".to_string())?;
                     thread::sleep(Duration::from_millis(500));
                 }
                 v=0;
             }
-            101 =>{
-                
-                
-            }
-            
+    
             1 =>{
+                let mut cbuffer_w = [0x01,241,liftdone as u8,242,10 as u8,243,90 as u8,0xA,0xD];
+                i2c_crane.write(&mut cbuffer_w).unwrap_or_default();
                 // state is 1
                 // drive up to starting line
                 // driven by camera arduino
@@ -346,35 +342,26 @@ fn main() -> Result<(), Box<dyn Error>> {
                 // when distance sesnor triggers change modes to mode 7 and send to camera
             }
             6 =>{
-                if distance_sensor < 200{
+                if distance_sensor_1 < 200{
                     uart.write("setmode 7c\r\n".to_string())?;
                 }
                 // state is 6
                 // orignial plan - drive to bridge
             }
 
-            /* 
-            X2 =>{
-                if imu_h != 0 
-                {          // while not straight - rotate to
-                    if imu_h > 1800 {
-                        //rotate to the right slowly
-                    }
-                    else {
-                        //rotate to the left slowly
-                    }
-                }    
-                // offset to the vector starting point using Pixy          
-            }
-            */
             7 =>{
                 // state is 7
-                // deploy crane
+                // deploy crane// crane operation
                 liftdone = 0;
                 v=0;
                 uart.write("setmode 8c\r\n".to_string())?;
             }
             8 =>{
+                
+
+                let mut cbuffer_w = [0x01,241,liftdone as u8,242,0 as u8,243,0 as u8,0xA,0xD];
+                i2c_crane.write(&mut cbuffer_w).unwrap_or_default();
+            
                 v=0;
                 if liftdone == 1{
                     uart.write("setmode 9c\r\n".to_string())?;
@@ -387,8 +374,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 // state is 9
                 // read distance senor to verify bridge is up
                 // if not, try again then verify and if failed again, jump to 17
-                    uart.write("distancei\r\n".to_string())?;
-                    if distance_sensor > 150{
+                    uart.write("distance1i\r\n".to_string())?;
+                    if distance_sensor_1 > 150{
                         uart.write("setmode 40c\r\n".to_string())?;
                     }
                     loopcount +=1;
@@ -401,6 +388,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 // state is 10
                 // follow line up to intersection if going for brige and hill
                 // driven by camera
+                let mut cbuffer_w = [0x01,241,liftdone as u8,242,90 as u8,243,90 as u8,0xA,0xD];
+                i2c_crane.write(&mut cbuffer_w).unwrap_or_default();
             }
             11 =>{
                 // state is 11
@@ -418,6 +407,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 // drive in circle
                 // read IMU to read current heading
                 // switch to mode 15 when IMU is within 90° of original heading
+                let mut buffer_w = [0x01,251,40 as u8,252,80 as u8,253,97 as u8,0xA,0xD];
+                i2c.write(&mut buffer_w).unwrap_or_default();
             }
             14 =>{
                 // state is 14
@@ -428,44 +419,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                 // driven by camera
                 // follow line towards button
             }
-            16 =>{
+            26 =>{
                 // state is 16
                 // press button to end
+                
             }
 
-// hill climbing code
-            17 =>{
-
-                uart.write("readi\r\n".to_string())?;
-                direction_rot = 21;
-                current_mode = 18;
-                // state is 17
-                // use IMU to rotate 180°
-                // when done step jump to 18
-            }
- 
-/*           18 =>{
-                // state is 18
-                // camera drives
-                // take right turn
-                // use IMU to detect when turned
-            }
-            19 =>{
-                // state is 19
-                // raspberry pi drives over hill with IMU, camera used to align
-            }
-            20 =>{
-                // state is 20
-                // rotate to align with hill
-            }
-            21 =>{
-                // state is 21
-                // drive up hill
-            }
-            22 =>{
-                // state is 22
-                //
-            }*/
             23 =>{
                 // state is 23
                 // find when on bottom of hill
@@ -498,40 +457,33 @@ fn main() -> Result<(), Box<dyn Error>> {
         let va = (v as f64)*(angle1.cos())+80.0;
         let vb = (v as f64)*(angle2.cos())+80.0;
         let vc = -1.0*(v as f64)*(angle3.cos())+80.0;
-
-        if direction_rot > 20 {
-            let mut buffer_w = [0x01,251,(va as u8)-10,252,(vb as u8)-10,253,(vc as u8)-10,0xA,0xD];
-        i2c.write(&mut buffer_w).unwrap_or_default();
-        }
-        else if direction_rot < -20 {
-            let mut buffer_w = [0x01,251,(va as u8)+10,252,(vb as u8)+10,253,(vc as u8)+10,0xA,0xD];
-        i2c.write(&mut buffer_w).unwrap_or_default();
-        }
-        else{
-            let mut buffer_w = [0x01,251,va as u8,252,vb as u8,253,vc as u8,0xA,0xD];
+        if current_mode != 13{ // if not in mode to drive
+            if direction_rot > 20 {
+                let mut buffer_w = [0x01,251,(va as u8)-10,252,(vb as u8)-10,253,(vc as u8)-10,0xA,0xD];
             i2c.write(&mut buffer_w).unwrap_or_default();
+            }
+            else if direction_rot < -20 {
+                let mut buffer_w = [0x01,251,(va as u8)+10,252,(vb as u8)+10,253,(vc as u8)+10,0xA,0xD];
+            i2c.write(&mut buffer_w).unwrap_or_default();
+            }
+            else{
+                let mut buffer_w = [0x01,251,va as u8,252,vb as u8,253,vc as u8,0xA,0xD];
+                i2c.write(&mut buffer_w).unwrap_or_default();
+            }
         }
         //println!("{} {} {}", vc,va,vb);
-
-
-
-// crane operation
-
         let mut cbuffer_r = [0;5];
 
-        i2c_crane.read(&mut cbuffer_r)?;
-        //println!("write read with length {} -> {:?} ", cbuffer_r.len(), cbuffer_r);
+                i2c_crane.read(&mut cbuffer_r)?;
+                //println!("write read with length {} -> {:?} ", cbuffer_r.len(), cbuffer_r);
 
-        if cbuffer_r[0] == 1 && cbuffer_r[1] == 112 && cbuffer_r[3] == 13 && cbuffer_r[4] == 10{
-            liftreport = cbuffer_r[2];
-        }
-        if liftreport == 1 {
-            liftdone = 1;
-            liftreport = 0;
-        }
-
-        let mut cbuffer_w = [0x01,241,liftdone as u8,242,10 as u8,243,10 as u8,0xA,0xD];
-        i2c_crane.write(&mut cbuffer_w).unwrap_or_default();
+                if cbuffer_r[0] == 1 && cbuffer_r[1] == 112 && cbuffer_r[3] == 13 && cbuffer_r[4] == 10{
+                    liftreport = cbuffer_r[2];
+                }
+                if liftreport == 1 {
+                    liftdone = 1;
+                    liftreport = 0;
+                }
     }
 }
 
